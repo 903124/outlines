@@ -282,4 +282,151 @@ class PipelineBuilder:
         Pipeline
             The constructed pipeline
         """
-        return Pipeline(self.steps) 
+        return Pipeline(self.steps)
+
+
+def create_pipeline(
+    regex_patterns: List[Term],
+    token_triggers: Optional[List[Optional[str]]] = None,
+    step_names: Optional[List[Optional[str]]] = None
+) -> Pipeline:
+    """Create a pipeline directly from lists of regex patterns and optional token triggers.
+    
+    Parameters
+    ----------
+    regex_patterns : List[Term]
+        List of regex patterns for each step
+    token_triggers : Optional[List[Optional[str]]]
+        Optional list of token trigger patterns for each step. 
+        Use None for steps that don't have triggers.
+    step_names : Optional[List[Optional[str]]]
+        Optional list of names for each step.
+        
+    Returns
+    -------
+    Pipeline
+        The constructed pipeline
+        
+    Examples
+    --------
+    >>> from outlines.types.dsl import String, digit
+    >>> pipeline = create_pipeline(
+    ...     regex_patterns=[String("Step 1: ") + digit, String("Step 2: ") + digit],
+    ...     token_triggers=[r"\n", None]
+    ... )
+    """
+    builder = PipelineBuilder()
+    
+    # Default empty lists if None
+    if token_triggers is None:
+        token_triggers = [None] * len(regex_patterns)
+    if step_names is None:
+        step_names = [None] * len(regex_patterns)
+        
+    # Ensure lists are the same length
+    if len(token_triggers) != len(regex_patterns):
+        raise ValueError("token_triggers list must have the same length as regex_patterns")
+    if len(step_names) != len(regex_patterns):
+        raise ValueError("step_names list must have the same length as regex_patterns")
+    
+    # Add each step to the builder
+    for pattern, trigger, name in zip(regex_patterns, token_triggers, step_names):
+        builder.add_step(regex_pattern=pattern, token_trigger=trigger, name=name)
+        
+    return builder.build()
+
+
+def run_pipeline(
+    model: Any,
+    prompt: Union[str, List[str]],
+    regex_patterns: List[Term],
+    token_triggers: Optional[List[Optional[str]]] = None,
+    step_names: Optional[List[Optional[str]]] = None,
+    max_tokens: Optional[int] = None,
+    stop_at: Optional[Union[str, List[str]]] = None,
+    seed: Optional[int] = None,
+    **model_specific_params
+) -> str:
+    """Create and execute a pipeline in a single function call.
+    
+    Parameters
+    ----------
+    model : Any
+        The model to use for generation
+    prompt : Union[str, List[str]]
+        The prompt(s) to use for generation
+    regex_patterns : List[Term]
+        List of regex patterns for each step
+    token_triggers : Optional[List[Optional[str]]]
+        Optional list of token trigger patterns for each step
+    step_names : Optional[List[Optional[str]]]
+        Optional list of names for each step
+    max_tokens : Optional[int]
+        Maximum number of tokens to generate
+    stop_at : Optional[Union[str, List[str]]]
+        Additional stop sequences
+    seed : Optional[int]
+        Random seed for generation
+    **model_specific_params
+        Model-specific parameters
+        
+    Returns
+    -------
+    str
+        The generated text from all pipeline steps
+        
+    Examples
+    --------
+    >>> from outlines.types.dsl import String, digit
+    >>> result = run_pipeline(
+    ...     model,
+    ...     prompt="Count to 5",
+    ...     regex_patterns=[String("Thinking: ") + digit, String("Answer: ") + digit],
+    ...     token_triggers=[r"\n", None]
+    ... )
+    """
+    pipeline = create_pipeline(regex_patterns, token_triggers, step_names)
+    return pipeline.execute(model, prompt, max_tokens, stop_at, seed, **model_specific_params)
+
+
+def stream_pipeline(
+    model: Any,
+    prompt: Union[str, List[str]],
+    regex_patterns: List[Term],
+    token_triggers: Optional[List[Optional[str]]] = None,
+    step_names: Optional[List[Optional[str]]] = None,
+    max_tokens: Optional[int] = None,
+    stop_at: Optional[Union[str, List[str]]] = None,
+    seed: Optional[int] = None,
+    **model_specific_params
+) -> Iterator[str]:
+    """Create and stream a pipeline in a single function call.
+    
+    Parameters
+    ----------
+    model : Any
+        The model to use for generation
+    prompt : Union[str, List[str]]
+        The prompt(s) to use for generation
+    regex_patterns : List[Term]
+        List of regex patterns for each step
+    token_triggers : Optional[List[Optional[str]]]
+        Optional list of token trigger patterns for each step
+    step_names : Optional[List[Optional[str]]]
+        Optional list of names for each step
+    max_tokens : Optional[int]
+        Maximum number of tokens to generate
+    stop_at : Optional[Union[str, List[str]]]
+        Additional stop sequences
+    seed : Optional[int]
+        Random seed for generation
+    **model_specific_params
+        Model-specific parameters
+        
+    Returns
+    -------
+    Iterator[str]
+        An iterator that yields the generated tokens
+    """
+    pipeline = create_pipeline(regex_patterns, token_triggers, step_names)
+    return pipeline.stream(model, prompt, max_tokens, stop_at, seed, **model_specific_params) 
