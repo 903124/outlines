@@ -209,7 +209,7 @@ class Pipeline:
             
             pattern = step.get_regex_string()
             logits_processor = RegexLogitsProcessor(pattern, tokenizer=model.tokenizer)
-            generator = SequenceGeneratorAdapter(model, logits_processor, model.default_sampler)
+            generator = SequenceGeneratorAdapter(model, logits_processor, multinomial())
             
             # Generate and stream tokens for this step
             step_generated = ""
