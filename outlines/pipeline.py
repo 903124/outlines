@@ -45,6 +45,9 @@ class PipelineStep:
     
     Each step consists of a regex pattern that guides generation,
     and an optional token trigger that signals when to move to the next step.
+    
+    The regex pattern can be any outlines Term type, including String, Regex,
+    and JsonSchema (which supports Pydantic models).
     """
     def __init__(
         self, 
@@ -257,7 +260,8 @@ class PipelineBuilder:
         Parameters
         ----------
         regex_pattern : Term
-            The regex pattern for this step
+            The regex pattern for this step. Can be any Term type including
+            String, Regex, or a Pydantic model wrapped with JsonSchema.
         token_trigger : Optional[Union[str, TokenTrigger]]
             A token trigger or trigger pattern string
         name : Optional[str]
@@ -295,7 +299,8 @@ def create_pipeline(
     Parameters
     ----------
     regex_patterns : List[Term]
-        List of regex patterns for each step
+        List of regex patterns for each step. These can be any Term type including
+        String, Regex, or a Pydantic model wrapped with the json_schema() function.
     token_triggers : Optional[List[Optional[str]]]
         Optional list of token trigger patterns for each step. 
         Use None for steps that don't have triggers.
@@ -309,10 +314,21 @@ def create_pipeline(
         
     Examples
     --------
-    >>> from outlines.types.dsl import String, digit
+    >>> from outlines.types.dsl import String, digit, json_schema
+    >>> from pydantic import BaseModel
+    >>> 
+    >>> # Define a Pydantic model for structured output
+    >>> class Conclusion(BaseModel):
+    ...     conclusion: str
+    ...     count: int
+    ... 
     >>> pipeline = create_pipeline(
-    ...     regex_patterns=[String("Step 1: ") + digit, String("Step 2: ") + digit],
-    ...     token_triggers=[r"\n", None]
+    ...     regex_patterns=[
+    ...         String("Step 1: ") + digit, 
+    ...         String("Step 2: ") + digit,
+    ...         json_schema(Conclusion)
+    ...     ],
+    ...     token_triggers=[r"\n", r"\n", None]
     ... )
     """
     builder = PipelineBuilder()
@@ -356,11 +372,13 @@ def run_pipeline(
     prompt : Union[str, List[str]]
         The prompt(s) to use for generation
     regex_patterns : List[Term]
-        List of regex patterns for each step
+        List of regex patterns for each step. These can be any Term type including
+        String, Regex, or Pydantic models wrapped with the json_schema() function.
     token_triggers : Optional[List[Optional[str]]]
-        Optional list of token trigger patterns for each step
+        Optional list of token trigger patterns for each step.
+        Use None for steps that don't have triggers.
     step_names : Optional[List[Optional[str]]]
-        Optional list of names for each step
+        Optional list of names for each step.
     max_tokens : Optional[int]
         Maximum number of tokens to generate
     stop_at : Optional[Union[str, List[str]]]
@@ -373,16 +391,27 @@ def run_pipeline(
     Returns
     -------
     str
-        The generated text from all pipeline steps
+        The combined generated text from all steps
         
     Examples
     --------
-    >>> from outlines.types.dsl import String, digit
-    >>> result = run_pipeline(
+    >>> from outlines.types.dsl import String, digit, json_schema
+    >>> from pydantic import BaseModel
+    >>> 
+    >>> # Define a Pydantic model for structured output
+    >>> class Conclusion(BaseModel):
+    ...     conclusion: str
+    ...     count: int
+    ... 
+    >>> model = outlines.models.transformers("gpt2")
+    >>> output = run_pipeline(
     ...     model,
-    ...     prompt="Count to 5",
-    ...     regex_patterns=[String("Thinking: ") + digit, String("Answer: ") + digit],
-    ...     token_triggers=[r"\n", None]
+    ...     prompt="Count the letters",
+    ...     regex_patterns=[
+    ...         String("Thinking: ") + String("..."),
+    ...         json_schema(Conclusion)
+    ...     ],
+    ...     token_triggers=[r"\n\n", None]
     ... )
     """
     pipeline = create_pipeline(regex_patterns, token_triggers, step_names)
@@ -400,7 +429,9 @@ def stream_pipeline(
     seed: Optional[int] = None,
     **model_specific_params
 ) -> Iterator[str]:
-    """Create and stream a pipeline in a single function call.
+    """Create and stream from a pipeline in a single function call.
+    
+    This function works like run_pipeline() but streams the output token by token.
     
     Parameters
     ----------
@@ -409,11 +440,13 @@ def stream_pipeline(
     prompt : Union[str, List[str]]
         The prompt(s) to use for generation
     regex_patterns : List[Term]
-        List of regex patterns for each step
+        List of regex patterns for each step. These can be any Term type including
+        String, Regex, or Pydantic models wrapped with the json_schema() function.
     token_triggers : Optional[List[Optional[str]]]
-        Optional list of token trigger patterns for each step
+        Optional list of token trigger patterns for each step.
+        Use None for steps that don't have triggers.
     step_names : Optional[List[Optional[str]]]
-        Optional list of names for each step
+        Optional list of names for each step.
     max_tokens : Optional[int]
         Maximum number of tokens to generate
     stop_at : Optional[Union[str, List[str]]]
@@ -426,7 +459,29 @@ def stream_pipeline(
     Returns
     -------
     Iterator[str]
-        An iterator that yields the generated tokens
+        Iterator yielding tokens as they are generated
+        
+    Examples
+    --------
+    >>> from outlines.types.dsl import String, digit, json_schema
+    >>> from pydantic import BaseModel
+    >>> 
+    >>> # Define a Pydantic model for structured output
+    >>> class Conclusion(BaseModel):
+    ...     conclusion: str
+    ...     count: int
+    ... 
+    >>> model = outlines.models.transformers("gpt2")
+    >>> for token in stream_pipeline(
+    ...     model,
+    ...     prompt="Count the letters",
+    ...     regex_patterns=[
+    ...         String("Thinking: ") + String("..."),
+    ...         json_schema(Conclusion)
+    ...     ],
+    ...     token_triggers=[r"\n\n", None]
+    ... ):
+    ...     print(token, end="", flush=True)
     """
     pipeline = create_pipeline(regex_patterns, token_triggers, step_names)
     return pipeline.stream(model, prompt, max_tokens, stop_at, seed, **model_specific_params) 
